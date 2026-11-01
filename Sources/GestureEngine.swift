@@ -3,7 +3,7 @@ import CoreGraphics
 
 /// One Euro filter: smooths jitter when the hand is still, stays responsive when it moves.
 struct OneEuro {
-    var minCutoff = 2.0, beta = 0.05, dCutoff = 1.0   // tuned for low lag
+    var minCutoff = 1.2, beta = 0.02, dCutoff = 1.0   // steady when still, no lag when moving
     private var x: Double? = nil
     private var dx: Double = 0
     private var t: Double? = nil
@@ -35,7 +35,7 @@ struct OneEuro {
 ///  🤏 Pinch thumb + index           → click (hold to drag, pinch twice = double-click)
 ///  Thumb + middle finger touch      → right-click
 ///  🫰 Snap (thumb + middle)          → quit every app and close every window
-///  ✌️ Two fingers up, move up/down  → scroll
+///  ✌️ Two fingers up, tilt up/down from start → scroll (hold still = stop)
 ///  🖐 Open palm swipe left / right  → previous / next desktop (Space)
 ///  🖐 Open palm swipe up            → Mission Control
 ///  🖐 Open palm swipe down          → App Exposé
@@ -65,6 +65,9 @@ final class GestureEngine {
     private var lastClickTime: TimeInterval = 0
     private var clickCount: Int64 = 1
     private var lastScrollY: CGFloat?
+    private var scrollAnchor: CGFloat?
+    private var scrollFilter = OneEuro()
+    private var lostSince: TimeInterval?
     private var wristHistory: [(t: TimeInterval, p: CGPoint)] = []
     private var lastSwipe: TimeInterval = 0
     private var stillSince: TimeInterval?
@@ -82,6 +85,8 @@ final class GestureEngine {
         rightPinching = false
         fx.reset(); fy.reset()
         lastScrollY = nil
+        scrollAnchor = nil
+        scrollFilter.reset()
         wristHistory.removeAll()
         stillSince = nil
         palmFired = false
@@ -96,7 +101,15 @@ final class GestureEngine {
     }
 
     func process(_ frame: HandFrame?) {
-        guard let f = frame else { reset(); return }
+        // Vision misses a frame now and then. Don't drop the drag/scroll for a blip:
+        // only reset after the hand has been gone for 0.3 s.
+        guard let f = frame else {
+            let now = ProcessInfo.processInfo.systemUptime
+            if lostSince == nil { lostSince = now }
+            if let l = lostSince, now - l > 0.3 { reset() }
+            return
+        }
+        lostSince = nil
         let p = f.points
         guard let wrist = p[.wrist], let middleMCP = p[.middleMCP], let indexMCP = p[.indexMCP],
               let thumbTip = p[.thumbTip],
@@ -129,8 +142,9 @@ final class GestureEngine {
         }
 
         let newPose: Pose
-        if pinching || (iE && !mE && !rE && !lE) { newPose = .pointer }
-        else if iE && mE && !rE && !lE { newPose = .scroll }
+        // Lenient: only the fingers that matter are checked, so a relaxed hand still works.
+        if pinching || (iE && !mE) { newPose = .pointer }
+        else if iE && mE && !rE { newPose = .scroll }
         else if iE && mE && rE && lE { newPose = .palm }
         else if !iE && !mE && !rE && !lE { newPose = .fist }
         else { newPose = .other }
@@ -147,6 +161,8 @@ final class GestureEngine {
 
         if stablePose != pose {
             lastScrollY = nil
+            scrollAnchor = nil
+            scrollFilter.reset()
             wristHistory.removeAll()
             stillSince = nil
             palmFired = false
@@ -194,7 +210,7 @@ final class GestureEngine {
             let c = CGPoint(x: fx.filter(Double(target.x), f.time),
                             y: fy.filter(Double(target.y), f.time))
             let frozen = pinching && f.time - pinchStart < 0.08   // hold still right after a click
-            let moved = lastMoveTarget.map { dist($0, c) >= 1.5 } ?? true   // ignore sub-pixel jitter
+            let moved = lastMoveTarget.map { dist($0, c) >= 2.5 } ?? true   // ignore sub-pixel jitter
             if !frozen && moved {
                 cursor = c
                 lastMoveTarget = c
@@ -209,13 +225,19 @@ final class GestureEngine {
             }
 
         case .scroll:
-            let y = indexMCP.y
-            if let ly = lastScrollY {
-                var d = (y - ly) * 3000
+            // Joystick scroll: where your two fingers start is "neutral".
+            // Move up/down from there and it keeps scrolling; further = faster.
+            // Hold still = stop. No jitter-scrolling.
+            let y = CGFloat(scrollFilter.filter(Double(indexMCP.y), f.time))
+            if scrollAnchor == nil { scrollAnchor = y }
+            let off = (y - scrollAnchor!) / scale           // relative to hand size
+            let dead: CGFloat = 0.12
+            if abs(off) > dead {
+                let mag = min(abs(off) - dead, 1.0)
+                var d = (off > 0 ? 1 : -1) * (6 + mag * 140)   // pixels per frame
                 if reverseScroll { d = -d }
-                if abs(d) > 1 { Input.scroll(Int32(d.rounded())) }
+                Input.scroll(Int32(d.rounded()))
             }
-            lastScrollY = y
 
         case .palm:
             wristHistory.append((f.time, wrist))
@@ -276,8 +298,8 @@ final class GestureEngine {
     /// Uses the middle of the camera view so you don't have to stretch to reach screen edges.
     private func mapToScreen(_ pt: CGPoint) -> CGPoint {
         let b = CGDisplayBounds(CGMainDisplayID())
-        let nx = clamp((pt.x - 0.2) / 0.6)
-        let ny = clamp((pt.y - 0.25) / 0.55)
+        let nx = clamp((pt.x - 0.25) / 0.5)    // small hand movements cover the whole screen
+        let ny = clamp((pt.y - 0.3) / 0.45)
         return CGPoint(x: b.minX + nx * (b.width - 1), y: b.minY + (1 - ny) * (b.height - 1))
     }
 }

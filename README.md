@@ -24,7 +24,7 @@ Press **⌥⌘G** (Option+Command+G) to start a session. The camera switches on 
 | 🤏 Pinch thumb and index | Click (hold to drag, pinch twice to double-click) |
 | 👌 Touch thumb to middle finger, release gently | Right-click |
 | 🫰 Snap your fingers | Quit every app and close every window |
-| ✌️ Two fingers up, move up/down | Scroll |
+| ✌️ Two fingers up, raise or lower your hand | Scroll (joystick style; hold still to stop) |
 | 🖐 Palm swipe left/right | Switch desktops (Spaces) |
 | 🖐 Palm swipe up / down | Mission Control / App Exposé |
 | 🖐 Palm held still for 1 s | Play / pause |

@@ -354,7 +354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         🤏  Pinch thumb + index to click (hold to drag, twice for double-click)
         👌  Touch thumb to middle finger, then let go gently to right-click
         🫰  Snap your fingers to quit all apps and close all windows
-        ✌️  Two fingers up, move hand up/down to scroll
+        ✌️  Two fingers up, then raise or lower your hand to scroll (hold still to stop)
         🖐  Open palm, swipe left/right to switch desktops
         🖐  Open palm, swipe up for Mission Control, down for App Exposé
         🖐  Hold an open palm still for 1 s to play/pause
