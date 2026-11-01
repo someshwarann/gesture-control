@@ -34,6 +34,7 @@ struct OneEuro {
 ///  ☝️ Point (index up)             → move the cursor
 ///  🤏 Pinch thumb + index           → click (hold to drag, pinch twice = double-click)
 ///  Thumb + middle finger touch      → right-click
+///  🫰 Snap (thumb + middle)          → quit every app and close every window
 ///  ✌️ Two fingers up, move up/down  → scroll
 ///  🖐 Open palm swipe left / right  → previous / next desktop (Space)
 ///  🖐 Open palm swipe up            → Mission Control
@@ -50,6 +51,11 @@ final class GestureEngine {
     private var candidate: Pose = .none
     private var candidateFrames = 0
     private var lastMoveTarget: CGPoint?
+    var snapEnabled = true
+    var onSnap: (() -> Void)?
+    private var midTouching = false
+    private var midReleaseTime: TimeInterval?
+    private var lastSnap: TimeInterval = 0
 
     private var fx = OneEuro(), fy = OneEuro()
     private var cursor: CGPoint?
@@ -82,6 +88,8 @@ final class GestureEngine {
         fistSince = nil
         fistFired = false
         pose = .none
+        midTouching = false
+        midReleaseTime = nil
         candidate = .none
         candidateFrames = 0
         lastMoveTarget = nil
@@ -149,6 +157,31 @@ final class GestureEngine {
             onStatus?(Self.label(for: pose))
         }
 
+        // Thumb + middle finger: a quick release where the middle finger slaps down
+        // into the palm is a SNAP (quit all apps). A gentle release is a right-click.
+        let midDist = dist(thumbTip, middleTip) / scale
+        if !pinching {
+            if !midTouching && midDist < 0.25 { midTouching = true; midReleaseTime = nil }
+            else if midTouching && midDist > 0.38 { midTouching = false; midReleaseTime = f.time }
+        }
+        if let r = midReleaseTime {
+            let since = f.time - r
+            if snapEnabled && !mE && since < 0.35 && f.time - lastSnap > 3 {
+                midReleaseTime = nil
+                lastSnap = f.time
+                onStatus?("🫰 Snap! Closing everything")
+                onSnap?()
+            } else if since >= 0.2 && (mE || !snapEnabled) {
+                midReleaseTime = nil
+                if pose == .pointer {
+                    Input.rightClick(at: cursor ?? Input.currentCursor)
+                    onStatus?("👌 Right-click")
+                }
+            } else if since >= 0.4 {
+                midReleaseTime = nil
+            }
+        }
+
         // Release a click/drag whatever pose the hand moved into.
         if wasPinching && !pinching {
             Input.mouse(.leftMouseUp, at: cursor ?? Input.currentCursor, button: .left, clicks: clickCount)
@@ -173,17 +206,6 @@ final class GestureEngine {
                 lastClickTime = f.time
                 Input.mouse(.leftMouseDown, at: cursor ?? c, button: .left, clicks: clickCount)
                 onStatus?(clickCount > 1 ? "🤏 Double-click" : "🤏 Click")
-            }
-            // Right-click: thumb touches middle finger while not pinching the index.
-            let midDist = dist(thumbTip, middleTip) / scale
-            if !pinching {
-                if !rightPinching && midDist < 0.25 {
-                    rightPinching = true
-                    Input.rightClick(at: cursor ?? c)
-                    onStatus?("👌 Right-click")
-                } else if rightPinching && midDist > 0.38 {
-                    rightPinching = false
-                }
             }
 
         case .scroll:

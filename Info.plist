@@ -12,6 +12,8 @@
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Gesture Control closes Finder windows when you snap.</string>
     <key>NSCameraUsageDescription</key>
     <string>Gesture Control reads your hand position to control your Mac. Video is processed on this Mac only and never saved or uploaded.</string>
 </dict>

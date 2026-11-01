@@ -9,6 +9,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let tracker = HandTracker()
     private let engine = GestureEngine()
     private let hud = HUD()
+    private var snapEnabled: Bool {
+        get { defaults.object(forKey: "snapQuit") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "snapQuit") }
+    }
     private var showHUD: Bool {
         get { defaults.object(forKey: "showHUD") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "showHUD") }
@@ -47,6 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self = self, self.mode == .onDemand else { return }
                 self.stopCamera()
             }
+        }
+        engine.snapEnabled = snapEnabled
+        engine.onSnap = { [weak self] in
+            DispatchQueue.main.async { self?.closeEverything() }
         }
         engine.onStatus = { [weak self] text in
             DispatchQueue.main.async {
@@ -244,6 +252,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let rs = NSMenuItem(title: "Reverse scroll", action: #selector(toggleReverse), keyEquivalent: "")
         rs.state = engine.reverseScroll ? .on : .off; rs.target = self
         menu.addItem(rs)
+        let snapItem = NSMenuItem(title: "Snap closes all apps & windows", action: #selector(toggleSnap), keyEquivalent: "")
+        snapItem.state = snapEnabled ? .on : .off; snapItem.target = self
+        menu.addItem(snapItem)
         let hudItem = NSMenuItem(title: "Show gesture indicator", action: #selector(toggleHUD), keyEquivalent: "")
         hudItem.state = showHUD ? .on : .off; hudItem.target = self
         menu.addItem(hudItem)
@@ -291,6 +302,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rebuildMenu()
     }
 
+    @objc private func toggleSnap() { snapEnabled.toggle(); engine.snapEnabled = snapEnabled; rebuildMenu() }
+
+    /// Quits every app normally (apps with unsaved work still ask to save),
+    /// then closes all Finder windows. Finder and this app keep running.
+    private func closeEverything() {
+        let me = NSRunningApplication.current.processIdentifier
+        for app in NSWorkspace.shared.runningApplications
+        where app.activationPolicy == .regular
+            && app.processIdentifier != me
+            && app.bundleIdentifier != "com.apple.finder" {
+            app.terminate()
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            var err: NSDictionary?
+            NSAppleScript(source: "tell application \"Finder\" to close every window")?.executeAndReturnError(&err)
+        }
+        if sounds { NSSound(named: NSSound.Name("Glass"))?.play() }
+    }
+
     @objc private func toggleHUD() { showHUD.toggle(); if !showHUD { hud.hide() }; rebuildMenu() }
 
     @objc private func toggleSounds() { sounds.toggle(); rebuildMenu() }
@@ -322,7 +352,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         ☝️  Point with your index finger to move the cursor
         🤏  Pinch thumb + index to click (hold to drag, twice for double-click)
-        👌  Touch thumb to middle finger to right-click
+        👌  Touch thumb to middle finger, then let go gently to right-click
+        🫰  Snap your fingers to quit all apps and close all windows
         ✌️  Two fingers up, move hand up/down to scroll
         🖐  Open palm, swipe left/right to switch desktops
         🖐  Open palm, swipe up for Mission Control, down for App Exposé
