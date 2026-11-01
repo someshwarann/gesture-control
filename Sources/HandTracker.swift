@@ -128,7 +128,7 @@ final class HandTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
             return
         }
         var mapped: [Joint: CGPoint] = [:]
-        for (joint, p) in pts where p.confidence > 0.3 {
+        for (joint, p) in pts where p.confidence > 0.1   // folded fingers have low confidence; keep them {
             mapped[joint] = CGPoint(x: 1 - p.location.x, y: p.location.y)   // mirror
         }
         onFrame?(mapped.isEmpty ? nil : HandFrame(points: mapped, time: t))

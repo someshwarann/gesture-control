@@ -8,6 +8,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let tracker = HandTracker()
     private let engine = GestureEngine()
+    private let hud = HUD()
+    private var showHUD: Bool {
+        get { defaults.object(forKey: "showHUD") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "showHUD") }
+    }
     private var hotKey: HotKey?
     private var statusItem: NSStatusItem!
     private let defaults = UserDefaults.standard
@@ -41,6 +46,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 guard let self = self, self.mode == .onDemand else { return }
                 self.stopCamera()
+            }
+        }
+        engine.onStatus = { [weak self] text in
+            DispatchQueue.main.async {
+                guard let self = self, self.cameraOn, self.showHUD else { return }
+                self.hud.show(text)
             }
         }
         tracker.onFrame = { [weak self] frame in
@@ -84,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tracker.start(fps: fps)
         startWatchdog()
         if sounds { NSSound(named: NSSound.Name("Tink"))?.play() }
+        if showHUD && mode == .onDemand { hud.show("👋 Show your hand") }
         updateIcon(); rebuildMenu()
     }
 
@@ -95,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tracker.stop()
         engine.reset()
         watchdog?.invalidate(); watchdog = nil
+        hud.hide()
         if sounds { NSSound(named: NSSound.Name("Pop"))?.play() }
         updateIcon(); rebuildMenu()
     }
@@ -124,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if self.handVisible && idle > 4 {
                     self.handVisible = false
                     self.tracker.setFPS(self.idleFPS)     // back to sipping power
+                    self.hud.hide()
                     self.updateIcon()
                 }
             }
@@ -230,6 +244,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let rs = NSMenuItem(title: "Reverse scroll", action: #selector(toggleReverse), keyEquivalent: "")
         rs.state = engine.reverseScroll ? .on : .off; rs.target = self
         menu.addItem(rs)
+        let hudItem = NSMenuItem(title: "Show gesture indicator", action: #selector(toggleHUD), keyEquivalent: "")
+        hudItem.state = showHUD ? .on : .off; hudItem.target = self
+        menu.addItem(hudItem)
         let snd = NSMenuItem(title: "Sounds", action: #selector(toggleSounds), keyEquivalent: "")
         snd.state = sounds ? .on : .off; snd.target = self
         menu.addItem(snd)
@@ -273,6 +290,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defaults.set(engine.reverseScroll, forKey: "reverseScroll")
         rebuildMenu()
     }
+
+    @objc private func toggleHUD() { showHUD.toggle(); if !showHUD { hud.hide() }; rebuildMenu() }
 
     @objc private func toggleSounds() { sounds.toggle(); rebuildMenu() }
 

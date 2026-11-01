@@ -45,6 +45,11 @@ final class GestureEngine {
 
     var reverseScroll = false
     var onFist: (() -> Void)?
+    /// Short status text for the on-screen indicator (called off the main thread).
+    var onStatus: ((String) -> Void)?
+    private var candidate: Pose = .none
+    private var candidateFrames = 0
+    private var lastMoveTarget: CGPoint?
 
     private var fx = OneEuro(), fy = OneEuro()
     private var cursor: CGPoint?
@@ -77,6 +82,9 @@ final class GestureEngine {
         fistSince = nil
         fistFired = false
         pose = .none
+        candidate = .none
+        candidateFrames = 0
+        lastMoveTarget = nil
     }
 
     func process(_ frame: HandFrame?) {
@@ -119,15 +127,26 @@ final class GestureEngine {
         else if !iE && !mE && !rE && !lE { newPose = .fist }
         else { newPose = .other }
 
-        if newPose != pose {
+        // Debounce: a new pose must hold for 2 frames (≈66 ms) so it doesn't flicker.
+        // Pinching switches instantly so clicks never feel late.
+        var stablePose = pose
+        if newPose == pose { candidateFrames = 0 }
+        else if pinching { stablePose = newPose }
+        else {
+            if newPose == candidate { candidateFrames += 1 } else { candidate = newPose; candidateFrames = 1 }
+            if candidateFrames >= 2 { stablePose = newPose; candidateFrames = 0 }
+        }
+
+        if stablePose != pose {
             lastScrollY = nil
             wristHistory.removeAll()
             stillSince = nil
             palmFired = false
             fistSince = nil
             fistFired = false
-            if pose == .pointer { fx.reset(); fy.reset() }
-            pose = newPose
+            if pose == .pointer { fx.reset(); fy.reset(); lastMoveTarget = nil }
+            pose = stablePose
+            onStatus?(Self.label(for: pose))
         }
 
         // Release a click/drag whatever pose the hand moved into.
@@ -142,8 +161,10 @@ final class GestureEngine {
             let c = CGPoint(x: fx.filter(Double(target.x), f.time),
                             y: fy.filter(Double(target.y), f.time))
             let frozen = pinching && f.time - pinchStart < 0.08   // hold still right after a click
-            if !frozen {
+            let moved = lastMoveTarget.map { dist($0, c) >= 1.5 } ?? true   // ignore sub-pixel jitter
+            if !frozen && moved {
                 cursor = c
+                lastMoveTarget = c
                 Input.move(to: c, dragging: pinching && wasPinching)
             }
             if pinching && !wasPinching {
@@ -151,6 +172,7 @@ final class GestureEngine {
                 clickCount = (f.time - lastClickTime < 0.45) ? min(clickCount + 1, 3) : 1
                 lastClickTime = f.time
                 Input.mouse(.leftMouseDown, at: cursor ?? c, button: .left, clicks: clickCount)
+                onStatus?(clickCount > 1 ? "🤏 Double-click" : "🤏 Click")
             }
             // Right-click: thumb touches middle finger while not pinching the index.
             let midDist = dist(thumbTip, middleTip) / scale
@@ -158,6 +180,7 @@ final class GestureEngine {
                 if !rightPinching && midDist < 0.25 {
                     rightPinching = true
                     Input.rightClick(at: cursor ?? c)
+                    onStatus?("👌 Right-click")
                 } else if rightPinching && midDist > 0.38 {
                     rightPinching = false
                 }
@@ -180,11 +203,13 @@ final class GestureEngine {
                 let dy = wrist.y - first.p.y
                 if abs(dx) > 0.16 && abs(dx) > 1.6 * abs(dy) {
                     Input.key(dx > 0 ? Input.right : Input.left, flags: .maskControl)
+                    onStatus?(dx > 0 ? "➡️ Next desktop" : "⬅️ Previous desktop")
                     lastSwipe = f.time; wristHistory.removeAll(); stillSince = nil
                     return
                 }
                 if abs(dy) > 0.16 && abs(dy) > 1.6 * abs(dx) {
                     Input.key(dy > 0 ? Input.up : Input.down, flags: .maskControl)
+                    onStatus?(dy > 0 ? "⬆️ Mission Control" : "⬇️ App Exposé")
                     lastSwipe = f.time; wristHistory.removeAll(); stillSince = nil
                     return
                 }
@@ -196,6 +221,7 @@ final class GestureEngine {
                 if stillSince == nil { stillSince = f.time }
                 if !palmFired, let s = stillSince, f.time - s > 0.7 {
                     Input.playPause()
+                    onStatus?("⏯ Play / Pause")
                     palmFired = true
                 }
             } else {
@@ -211,6 +237,17 @@ final class GestureEngine {
 
         case .none, .other:
             break
+        }
+    }
+
+    static func label(for pose: Pose) -> String {
+        switch pose {
+        case .pointer: return "☝️ Moving cursor"
+        case .scroll: return "✌️ Scrolling"
+        case .palm: return "🖐 Swipe, or hold to play/pause"
+        case .fist: return "✊ Hold to stop"
+        case .other: return "✋ Hand seen"
+        case .none: return "👋 Show your hand"
         }
     }
 
