@@ -31,9 +31,9 @@ Press **⌥⌘G** (Option+Command+G) to start a session. The camera switches on 
 
 ## Why it uses very little power
 - **On-demand by default.** The camera is completely off until you press ⌥⌘G, and it shuts off again after 5 s idle. Idle draw is zero, with no background camera.
-- **Low resolution and low fps.** Frames are 640×480 at 15 fps (10 fps in Low Power Mode), and late frames are dropped rather than queued.
+- **Low resolution and low fps.** Frames are 640×480 at 30 fps while your hand is tracked (20 fps in Low Power Mode), and late frames are dropped rather than queued.
 - **Apple Neural Engine.** Vision's hand-pose model runs on the Mac's ML hardware instead of burning the CPU, so it's much lighter than OpenCV or MediaPipe in Python.
-- **Always-on eco mode (optional).** The camera idles at 4 fps and only speeds up to 15 fps while a hand is in view.
+- **Always-on eco mode (optional).** The camera idles at 6 fps and only speeds up to 30 fps while a hand is in view.
 - **Auto-off guards.** The camera stops when you lock the screen, the display sleeps, the Mac sleeps, or the battery drops below 15%. Always-on mode is blocked in Low Power Mode.
 
 ## Notes

@@ -13,9 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let defaults = UserDefaults.standard
 
     // Power tuning
-    private let activeFPS: Int32 = 15        // while a hand is being tracked
-    private let ecoActiveFPS: Int32 = 10     // in Low Power Mode
-    private let idleFPS: Int32 = 4           // always-on mode, no hand in view
+    private let activeFPS: Int32 = 30        // while a hand is being tracked (fast response)
+    private let ecoActiveFPS: Int32 = 20     // in Low Power Mode
+    private let idleFPS: Int32 = 6           // always-on mode, no hand in view
     private let sessionIdleTimeout: TimeInterval = 5   // on-demand: camera off after 5 s with no hand
 
     private var mode: Mode {
@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rebuildMenu()
         updateIcon()
         observeSystem()
+        tracker.prepare()   // set up the camera pipeline now so ⌥⌘G starts instantly
         requestPermissions(prompt: true)
 
         if mode == .alwaysOn { startCamera() }
@@ -120,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .onDemand:
                 if idle > self.sessionIdleTimeout { self.stopCamera() }
             case .alwaysOn:
-                if self.handVisible && idle > 2.5 {
+                if self.handVisible && idle > 4 {
                     self.handVisible = false
                     self.tracker.setFPS(self.idleFPS)     // back to sipping power
                     self.updateIcon()
@@ -221,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let od = NSMenuItem(title: "On-demand: ⌥⌘G, camera off after 5 s (lowest power)", action: #selector(setOnDemand), keyEquivalent: "")
         od.state = mode == .onDemand ? .on : .off; od.target = self
         menu.addItem(od)
-        let ao = NSMenuItem(title: "Always on, eco (4 fps until a hand appears)", action: #selector(setAlwaysOn), keyEquivalent: "")
+        let ao = NSMenuItem(title: "Always on, eco (6 fps until a hand appears)", action: #selector(setAlwaysOn), keyEquivalent: "")
         ao.state = mode == .alwaysOn ? .on : .off; ao.target = self
         menu.addItem(ao)
         menu.addItem(.separator())

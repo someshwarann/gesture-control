@@ -3,7 +3,7 @@ import CoreGraphics
 
 /// One Euro filter: smooths jitter when the hand is still, stays responsive when it moves.
 struct OneEuro {
-    var minCutoff = 1.0, beta = 0.015, dCutoff = 1.0
+    var minCutoff = 2.0, beta = 0.05, dCutoff = 1.0   // tuned for low lag
     private var x: Double? = nil
     private var dx: Double = 0
     private var t: Double? = nil
@@ -141,7 +141,7 @@ final class GestureEngine {
             let target = mapToScreen(indexMCP)
             let c = CGPoint(x: fx.filter(Double(target.x), f.time),
                             y: fy.filter(Double(target.y), f.time))
-            let frozen = pinching && f.time - pinchStart < 0.18   // hold still right after a click
+            let frozen = pinching && f.time - pinchStart < 0.08   // hold still right after a click
             if !frozen {
                 cursor = c
                 Input.move(to: c, dragging: pinching && wasPinching)
@@ -174,16 +174,16 @@ final class GestureEngine {
 
         case .palm:
             wristHistory.append((f.time, wrist))
-            wristHistory.removeAll { f.time - $0.t > 0.4 }
-            if let first = wristHistory.first, f.time - first.t > 0.12, f.time - lastSwipe > 0.9 {
+            wristHistory.removeAll { f.time - $0.t > 0.3 }
+            if let first = wristHistory.first, f.time - first.t > 0.08, f.time - lastSwipe > 0.6 {
                 let dx = wrist.x - first.p.x
                 let dy = wrist.y - first.p.y
-                if abs(dx) > 0.2 && abs(dx) > 1.6 * abs(dy) {
+                if abs(dx) > 0.16 && abs(dx) > 1.6 * abs(dy) {
                     Input.key(dx > 0 ? Input.right : Input.left, flags: .maskControl)
                     lastSwipe = f.time; wristHistory.removeAll(); stillSince = nil
                     return
                 }
-                if abs(dy) > 0.2 && abs(dy) > 1.6 * abs(dx) {
+                if abs(dy) > 0.16 && abs(dy) > 1.6 * abs(dx) {
                     Input.key(dy > 0 ? Input.up : Input.down, flags: .maskControl)
                     lastSwipe = f.time; wristHistory.removeAll(); stillSince = nil
                     return
@@ -192,9 +192,9 @@ final class GestureEngine {
             // Palm held still → play/pause, once per hold.
             let spread = wristHistory.map { dist($0.p, wrist) }.max() ?? 1
             let covered = (wristHistory.last?.t ?? 0) - (wristHistory.first?.t ?? 0)
-            if spread < 0.025 && covered > 0.25 {
+            if spread < 0.025 && covered > 0.2 {
                 if stillSince == nil { stillSince = f.time }
-                if !palmFired, let s = stillSince, f.time - s > 0.9 {
+                if !palmFired, let s = stillSince, f.time - s > 0.7 {
                     Input.playPause()
                     palmFired = true
                 }
@@ -204,7 +204,7 @@ final class GestureEngine {
 
         case .fist:
             if fistSince == nil { fistSince = f.time }
-            if !fistFired, let s = fistSince, f.time - s > 0.7 {
+            if !fistFired, let s = fistSince, f.time - s > 0.5 {
                 fistFired = true
                 onFist?()
             }

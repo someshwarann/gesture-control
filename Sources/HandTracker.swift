@@ -19,11 +19,11 @@ final class HandTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
 
     private let session = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "gesture.session")
-    private let videoQueue = DispatchQueue(label: "gesture.vision", qos: .userInitiated)
+    private let videoQueue = DispatchQueue(label: "gesture.vision", qos: .userInteractive)
     private var device: AVCaptureDevice?
     private var configured = false
     private var lastProcessed: TimeInterval = 0
-    private(set) var targetFPS: Int32 = 15
+    private(set) var targetFPS: Int32 = 30
     private(set) var isRunning = false
 
     private let request: VNDetectHumanHandPoseRequest = {
@@ -58,6 +58,11 @@ final class HandTracker: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate 
         if session.canAddOutput(output) { session.addOutput(output) }
         session.commitConfiguration()
         configured = true
+    }
+
+    /// Builds the capture pipeline without turning the camera on (no light, no power).
+    func prepare() {
+        sessionQueue.async { [weak self] in try? self?.configure() }
     }
 
     func start(fps: Int32) {
