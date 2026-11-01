@@ -1,0 +1,33 @@
+name: Build Mac app
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build universal app
+        run: |
+          set -euo pipefail
+          APP="build/Gesture Control.app"
+          rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          for arch in arm64 x86_64; do
+            swiftc -O -target $arch-apple-macos13.0 Sources/*.swift -o build/GestureControl-$arch \
+              -framework AppKit -framework AVFoundation -framework Vision \
+              -framework Carbon -framework IOKit -framework ServiceManagement
+          done
+          lipo -create build/GestureControl-arm64 build/GestureControl-x86_64 -output "$APP/Contents/MacOS/GestureControl"
+          cp Info.plist "$APP/Contents/Info.plist"
+          codesign --force --deep --sign - "$APP"
+          cd build && ditto -c -k --keepParent "Gesture Control.app" GestureControl.zip
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v1.0.${{ github.run_number }}"
+          gh release create "$TAG" build/GestureControl.zip --title "Gesture Control $TAG" \
+            --notes "Download GestureControl.zip, unzip, move Gesture Control to Applications, then right-click it and choose Open the first time."
